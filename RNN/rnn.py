@@ -11,7 +11,9 @@ from keras.utils import to_categorical
 from matplotlib import pyplot
 from keras.wrappers.scikit_learn import KerasClassifier
 from sklearn.model_selection import GridSearchCV
+from loader import load_data, return_observation_by_observation
 import os
+import numpy as np
 
 # Just disables the warning, doesn't enable AVX/FMA
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -56,17 +58,17 @@ def load_dataset_group(group, prefix=''):
 def load_dataset(prefix=''):
     # load all train
     trainX, trainy = load_dataset_group('train', prefix)
-    print(trainX.shape, trainy.shape)
+    # print(trainX.shape, trainy.shape)
     # load all test
     testX, testy = load_dataset_group('test', prefix)
-    print(testX.shape, testy.shape)
+    # print(testX.shape, testy.shape)
     # zero-offset class values
     trainy = trainy - 1
     testy = testy - 1
     # one hot encode y
     trainy = to_categorical(trainy)
     testy = to_categorical(testy)
-    print(trainX.shape, trainy.shape, testX.shape, testy.shape)
+    # print(trainX.shape, trainy.shape, testX.shape, testy.shape)
     return trainX, trainy, testX, testy
 
 
@@ -84,7 +86,7 @@ def create_model(n_units_output_lstm, n_units_output_dense, n_timesteps, n_featu
 
 def optimize_model():
     # Load  the data
-    trainX, trainy, testX, testy = load_dataset('/home/cua/Documents/UCI HAR Dataset/')
+    trainX, trainy, testX, testy = load_dataset('/users/21509823t/PycharmProjects/CUA/Data/UCI HAR Dataset/')
     n_timesteps, n_features, n_classes = trainX.shape[1], trainX.shape[2], trainy.shape[1]
 
     # Map the model to scikit learn
@@ -173,16 +175,42 @@ def run_experiment(repeats=10):
 
 
 def evaluate_emergency_vehicles():
+    trainX, trainy = load_data('/users/21509823t/PycharmProjects/CUA/Data/export-debut.csv')
+    trainX2, trainy2, testX2, testy2 = load_dataset('/users/21509823t/PycharmProjects/CUA/Data/UCI HAR Dataset/')
+
+    print(trainX[0].shape)
+    print(trainX2[0].shape)
+
+    print()
+
+    print(trainX.shape)
+    print(trainX2.shape)
+
+    print(trainX)
+    print(trainX2)
+
+    exit()
+
+    n_batch = 1
+    n_epoch = 1
+
     model = Sequential()
-    model.add(LSTM(100, input_shape=(None, 24)))
+    model.add(LSTM(50, batch_input_shape=(1, None, 9)))
+    model.add(Dropout(0.5))
+    model.add(Dense(25, activation='relu'))
+    model.add(Dense(6, activation='softmax'))
+
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+    print(model.summary())
+
+    data_path = '/users/21509823t/PycharmProjects/CUA/Data/export-debut.csv'
+
+    model.fit(trainX2, trainy2, epochs=n_epoch, batch_size=n_batch, verbose=1, shuffle=False)
 
 
 prefix = '/users/21509823t/PycharmProjects/CUA/Data/UCI HAR Dataset/'
 # run_experiment()
 # optimize_model()
 
-trainX, trainy, testX, testy = load_dataset(prefix)
-
-print(trainX[0])
-print(trainX[:2], '\n', trainX.shape)
-print(trainy.shape)
+evaluate_emergency_vehicles()
