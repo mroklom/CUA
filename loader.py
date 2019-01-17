@@ -19,17 +19,13 @@ def load_data(path):
 
     grouped = df.groupby(['id_traj'])
     values = []
+    classes = []
 
     for name, group in grouped:
-        # print(name)
-        # print(group.values)
+        # Not so clean but anyway
+        classes.append(group['classe'].max())
 
-        values.append(group.values)
+        # Append everything except id_traj and classe
+        values.append(np.delete(group.values, [0, 1], 1))
 
-    return np.array(values)
-
-
-data = load_data(prefix + 'export-debut.csv')
-
-for trajectory in data:
-    print(trajectory.shape)
+    return np.array(values), np.array(classes)

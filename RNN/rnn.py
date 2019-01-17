@@ -172,6 +172,17 @@ def run_experiment(repeats=10):
     summarize_results(scores)
 
 
-prefix = '/home/cua/Documents/UCI HAR Dataset/'
+def evaluate_emergency_vehicles():
+    model = Sequential()
+    model.add(LSTM(100, input_shape=(None, 24)))
+
+
+prefix = '/users/21509823t/PycharmProjects/CUA/Data/UCI HAR Dataset/'
 # run_experiment()
-optimize_model()
+# optimize_model()
+
+trainX, trainy, testX, testy = load_dataset(prefix)
+
+print(trainX[0])
+print(trainX[:2], '\n', trainX.shape)
+print(trainy.shape)
