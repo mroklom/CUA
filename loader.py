@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from keras.utils import to_categorical
 
 prefix = '/users/21509823t/PycharmProjects/CUA/Data/'
 
@@ -23,9 +24,15 @@ def load_data(path):
 
     for name, group in grouped:
         # Not so clean but anyway
-        classes.append(group['classe'].max())
+        classes.append(to_categorical(group['classe'].max() - 1, 6))
 
         # Append everything except id_traj and classe
         values.append(np.delete(group.values, [0, 1], 1))
 
     return np.array(values), np.array(classes)
+
+
+def return_observation_by_observation(path):
+    X, y = load_data(path)
+    for observation, label in zip(X, y):
+        yield np.array([observation]), np.array([label])
