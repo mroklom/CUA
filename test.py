@@ -25,7 +25,7 @@ def get_max_length_sequence(data):
     return max_length
 
 
-def preprocess_sequences(data, max_length):
+def preprocess_sequences(data, max_length, n_features):
     new_data = []
 
     for sequence in data:
@@ -35,64 +35,65 @@ def preprocess_sequences(data, max_length):
         diff_length = max_length - sequence.shape[0]
         if diff_length != 0:
             for i in range(diff_length):
-                new_sequence = np.concatenate((new_sequence, np.array([[0, 0, 0]])))
+                new_sequence = np.concatenate((new_sequence, np.array([[0 for i in range(n_features)]])))
 
         new_data.append(new_sequence)
 
     return np.array(new_data)
 
 
-n_train = 10000
-n_test = 300
-n_features = 3
+if __name__ == "__main__":
+    n_train = 10000
+    n_test = 300
+    n_features = 3
 
-trainX = np.array([
-    np.array([
+    trainX = np.array([
         np.array([
-            np.random.randint(0, 10) for i in range(n_features)
-        ]) for j in range(np.random.randint(2, 5))
-    ]) for k in range(n_train)
-])
-
-trainy = np.array([generate_class(trainX[i]) for i in range(n_train)])
-
-testX = np.array([
-    np.array([
-        np.array([
-            np.random.randint(0, 10) for i in range(n_features)
-        ]) for j in range(np.random.randint(2, 5))
-    ]) for k in range(n_test)
-])
-
-testY = np.array([generate_class(testX[i]) for i in range(n_test)])
-
-trainX = preprocess_sequences(trainX, get_max_length_sequence(trainX))
-testX = preprocess_sequences(testX, get_max_length_sequence(testX))
-
-model = Sequential()
-model.add(LSTM(5, input_shape=(None, n_features)))
-model.add(Dropout(0.5))
-model.add(Dense(2, activation='softmax'))
-
-model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-
-model.fit(x=trainX, y=trainy, batch_size=100, epochs=10, verbose=2)
-loss, accuracy = model.evaluate(x=testX, y=testY, batch_size=1, verbose=2)
-print(accuracy)
-
-predX = [
-    np.array([
-        [1, 2, 2],
-        [4, 5, 6],
-        [1, 1, 1]
-    ]),
-    np.array([
-        [1, 2, 2],
-        [9, 9, 9]
+            np.array([
+                np.random.randint(0, 10) for i in range(n_features)
+            ]) for j in range(np.random.randint(2, 5))
+        ]) for k in range(n_train)
     ])
-]
 
-for to_pred in predX:
-    todo = np.array([to_pred])
-    predictions = model.predict(todo, batch_size=1, verbose=2)
-    print(predictions)
+    trainy = np.array([generate_class(trainX[i]) for i in range(n_train)])
+
+    testX = np.array([
+        np.array([
+            np.array([
+                np.random.randint(0, 10) for i in range(n_features)
+            ]) for j in range(np.random.randint(2, 5))
+        ]) for k in range(n_test)
+    ])
+
+    testY = np.array([generate_class(testX[i]) for i in range(n_test)])
+
+    trainX = preprocess_sequences(trainX, get_max_length_sequence(trainX), 3)
+    testX = preprocess_sequences(testX, get_max_length_sequence(testX), 3)
+
+    model = Sequential()
+    model.add(LSTM(5, input_shape=(None, n_features)))
+    model.add(Dropout(0.5))
+    model.add(Dense(2, activation='softmax'))
+
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+    model.fit(x=trainX, y=trainy, batch_size=100, epochs=10, verbose=2)
+    loss, accuracy = model.evaluate(x=testX, y=testY, batch_size=1, verbose=2)
+    print(accuracy)
+
+    predX = [
+        np.array([
+            [1, 2, 2],
+            [4, 5, 6],
+            [1, 1, 1]
+        ]),
+        np.array([
+            [1, 2, 2],
+            [9, 9, 9]
+        ])
+    ]
+
+    for to_pred in predX:
+        todo = np.array([to_pred])
+        predictions = model.predict(todo, batch_size=1, verbose=2)
+        print(predictions)

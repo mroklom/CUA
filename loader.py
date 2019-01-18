@@ -1,8 +1,7 @@
 import pandas as pd
 import numpy as np
 from keras.utils import to_categorical
-
-prefix = '/users/21509823t/PycharmProjects/CUA/Data/'
+from test import get_max_length_sequence, preprocess_sequences
 
 
 def load_data(path):
@@ -23,16 +22,35 @@ def load_data(path):
     classes = []
 
     for name, group in grouped:
-        # Not so clean but anyway
-        classes.append(to_categorical(group['classe'].max() - 1, 6))
 
         # Append everything except id_traj and classe
-        values.append(np.delete(group.values, [0, 1], 1))
+        if name == 538:
+            print('exception on', name, 'with', len(group), 'points')
+        else:
+            values.append(np.delete(group.values, [0, 1], 1))
+            # Not so clean but anyway
+            classes.append(to_categorical(group['classe'].max() - 1, 6))
 
-    return np.array(values), np.array(classes)
+    values = np.array(values)
+
+    max_l = get_max_length_sequence(values)
+
+    print('max length:', max_l)
+
+    print('Shapes before padding:', values.shape, 'first trajectory:', values[0].shape)
+    values = preprocess_sequences(values, max_l, values[0].shape[1])
+    print('Shapes after padding:', values.shape, 'first trajectory:', values[0].shape)
+    print()
+
+    return values, np.array(classes)
 
 
-def return_observation_by_observation(path):
-    X, y = load_data(path)
-    for observation, label in zip(X, y):
-        yield np.array([observation]), np.array([label])
+def return_observation_by_observation(X, y):
+    i = 0
+    while True:
+        yield np.array([X[i]]), np.array([y[i]])
+
+        i = i + 1
+
+        if i > X.shape[0] - 1:
+            i = 0

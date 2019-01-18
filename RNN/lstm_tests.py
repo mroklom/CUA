@@ -47,10 +47,11 @@ def train_generator():
 #     print(y_train)
 #     exit()
 
-model.fit_generator(train_generator(), steps_per_epoch=30, epochs=50, verbose=2)
+model.fit_generator(train_generator(), steps_per_epoch=30, epochs=1, verbose=2)
 
 
 x = np.array([np.transpose([[2 for i in range(11)]])])
 
+print(x.shape)
 
-print(model.predict(x, batch_size=None, verbose=0, steps=None))
+print(model.predict(x, batch_size=1, verbose=0, steps=None))
