@@ -4,7 +4,7 @@ from keras.utils import to_categorical
 from test import get_max_length_sequence, preprocess_sequences
 
 
-def load_data(path):
+def load_data_rnn(path, pad=True):
     df = pd.read_csv(path, sep=';', header=0)
 
     column_list_to_remove = [
@@ -33,24 +33,88 @@ def load_data(path):
 
     values = np.array(values)
 
-    max_l = get_max_length_sequence(values)
+    if pad:
+        max_l = get_max_length_sequence(values)
 
-    print('max length:', max_l)
+        print('max length:', max_l)
 
-    print('Shapes before padding:', values.shape, 'first trajectory:', values[0].shape)
-    values = preprocess_sequences(values, max_l, values[0].shape[1])
-    print('Shapes after padding:', values.shape, 'first trajectory:', values[0].shape)
-    print()
+        print('Shapes before padding:', values.shape, 'first trajectory:', values[0].shape)
+        values = preprocess_sequences(values, max_l, values[0].shape[1])
+        print('Shapes after padding:', values.shape, 'first trajectory:', values[0].shape)
+        print()
 
     return values, np.array(classes)
 
 
-def return_observation_by_observation(X, y):
-    i = 0
-    while True:
-        yield np.array([X[i]]), np.array([y[i]])
+def load_data_sae(path):
+    df = pd.read_csv(path, sep=';', header=0)
 
-        i = i + 1
+    column_list_to_remove = [
+        'id_vehicule',
+        'debut_traj',
+        'fin_traj',
+        'id_ligne',
+        'DATE'
+    ]
 
-        if i > X.shape[0] - 1:
-            i = 0
+    df.drop(columns=column_list_to_remove, inplace=True, axis=1)
+
+    cols_names = df.drop(columns=['id_traj', 'classe'], axis=1).columns.values
+
+    mapping = dict(
+        RPM='real',
+        SPEED='real',
+        RIGHT_FLASH='boolean',
+        LEFT_FLASH='boolean',
+        BRAKE_PEDAL='boolean',
+        PRIMARY_LT='boolean',
+        WIG_WAG='boolean',
+        REVERSE_GEAR='boolean',
+        CHASSIS_VOLT='real',
+        CONVERS_VOLT='real',
+        PARKING_LT='boolean',
+        HIGH_BEAM_LT='boolean',
+        SIREN='boolean',
+        THROTTLE='real',
+        ACC_LONG='real',
+        ACC_LATERAL='real',
+        ACC_VERTICAL='real',
+        FUEL_RATE='real',
+        DRIVER_DOOR='boolean',
+        BACK_DOOR='boolean',
+        PARK_BRAKE='boolean',
+        SEAT_BELT='boolean'
+    )
+
+    grouped = df.groupby(['id_traj'])
+    data = dict()
+    for col in mapping:
+        if mapping[col] == 'real':
+            data[col + '_mean'] = []
+            data[col + '_std'] = []
+            data[col + '_max'] = []
+            data[col + '_min'] = []
+        else:
+            data[col + '_uptime'] = []
+    data['class'] = []
+
+    for name, group in grouped:
+        if name == 538:
+            print('exception on', name, 'with', len(group), 'points')
+        else:
+            data['class'].append(group['classe'].max())
+            # Compute features for each trajectory
+            for col in mapping:
+
+                # If the series is real, compute mean etc ..
+                if mapping[col] == 'real':
+                    data[col + '_mean'].append(group[col].mean())
+                    data[col + '_std'].append(group[col].std())
+                    data[col + '_max'].append(group[col].max())
+                    data[col + '_min'].append(group[col].min())
+
+                # If the series is boolean, compute ration of true over false
+                elif mapping[col] == 'boolean':
+                    data[col + '_uptime'].append(group[col].mean())
+
+    return data

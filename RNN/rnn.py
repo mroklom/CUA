@@ -11,66 +11,13 @@ from keras.utils import to_categorical
 from matplotlib import pyplot
 from keras.wrappers.scikit_learn import KerasClassifier
 from sklearn.model_selection import GridSearchCV
-from loader import load_data, return_observation_by_observation
+from loader import load_data_rnn
 from sklearn.model_selection import train_test_split
 import os
 import numpy as np
 
 # Just disables the warning, doesn't enable AVX/FMA
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
-
-# # load a single file as a numpy array
-# def load_file(filepath):
-#     dataframe = read_csv(filepath, header=None, delim_whitespace=True)
-#     return dataframe.values
-
-
-# load a list of files and return as a 3d numpy array
-# def load_group(filenames, prefix=''):
-#     loaded = list()
-#     for name in filenames:
-#         data = load_file(prefix + name)
-#         loaded.append(data)
-#     # stack group so that features are the 3rd dimension
-#     loaded = dstack(loaded)
-#     return loaded
-
-
-# load a dataset group, such as train or test
-# def load_dataset_group(group, prefix=''):
-#     filepath = prefix + group + '/Inertial Signals/'
-#     # load all 9 files as a single array
-#     filenames = list()
-#     # total acceleration
-#     filenames += ['total_acc_x_' + group + '.txt', 'total_acc_y_' + group + '.txt', 'total_acc_z_' + group + '.txt']
-#     # body acceleration
-#     filenames += ['body_acc_x_' + group + '.txt', 'body_acc_y_' + group + '.txt', 'body_acc_z_' + group + '.txt']
-#     # body gyroscope
-#     filenames += ['body_gyro_x_' + group + '.txt', 'body_gyro_y_' + group + '.txt', 'body_gyro_z_' + group + '.txt']
-#     # load input data
-#     X = load_group(filenames, filepath)
-#     # load class output
-#     y = load_file(prefix + group + '/y_' + group + '.txt')
-#     return X, y
-
-
-# load the dataset, returns train and test X and y elements
-# def load_dataset(prefix=''):
-#     # load all train
-#     trainX, trainy = load_dataset_group('train', prefix)
-#     # print(trainX.shape, trainy.shape)
-#     # load all test
-#     testX, testy = load_dataset_group('test', prefix)
-#     # print(testX.shape, testy.shape)
-#     # zero-offset class values
-#     trainy = trainy - 1
-#     testy = testy - 1
-#     # one hot encode y
-#     trainy = to_categorical(trainy)
-#     testy = to_categorical(testy)
-#     # print(trainX.shape, trainy.shape, testX.shape, testy.shape)
-#     return trainX, trainy, testX, testy
 
 
 def create_model(n_units_output_lstm, n_units_output_dense, n_timesteps, n_features, n_classes):
@@ -87,7 +34,7 @@ def create_model(n_units_output_lstm, n_units_output_dense, n_timesteps, n_featu
 
 def optimize_model():
     # Load  the data
-    X, Y = load_data('/home/cua/PycharmProjects/CUA/Data/export-debut.csv')
+    X, Y = load_data_rnn('/home/cua/PycharmProjects/CUA/Data/export-debut.csv')
 
     trainX, testX, trainy, testy = train_test_split(X, Y, test_size=0.25)
 
@@ -146,22 +93,8 @@ def summarize_results(scores):
     print('Accuracy: %.3f%% (+/-%.3f)' % (m, s))
 
 
-# # Run multiple experiments
-# def run_experiment(repeats=10):
-#     trainX, trainy, testX, testy = load_dataset('/home/cua/Documents/UCI HAR Dataset/')
-#     scores = list()
-#     for r in range(repeats):
-#         print('Iteration ', r + 1)
-#         score = evaluate_model(trainX, trainy, testX, testy)
-#         score = score * 100.0
-#         print('>#%d: %.3f' % (r + 1, score))
-#         scores.append(score)
-#         print()
-#     summarize_results(scores)
-
-
 def evaluate_emergency_vehicles():
-    X, Y = load_data('/home/cua/PycharmProjects/CUA/Data/export-debut.csv')
+    X, Y = load_data_rnn('/home/cua/PycharmProjects/CUA/Data/export-debut.csv')
 
     trainX, testX, trainy, testy = train_test_split(X, Y, test_size=0.25)
     n_timesteps, n_features, n_classes = trainX.shape[1], trainX.shape[2], trainy.shape[1]
