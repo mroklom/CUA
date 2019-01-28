@@ -17,6 +17,7 @@ n_timesteps = train_x.shape[1]
 n_features = train_x.shape[2]
 n_classes = train_y.shape[1]
 
+# Optimize the model
 best_params_list, max_f1, search_results = optimize_model(train_x, train_y, cv=3)
 
 print('Best parameters possibilities found:\n', best_params_list, 'with f1_score of', max_f1)
