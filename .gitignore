@@ -1,4 +1,4 @@
 .idea/*
 .venv/*
-.visualization/*
+.visualization/results*
 Data/*

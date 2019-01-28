@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
+
 from keras.utils import to_categorical
-from test import get_max_length_sequence, preprocess_sequences
 
 
 def load_data_rnn(path, pad=True):
@@ -58,8 +58,6 @@ def load_data_sae(path):
     ]
 
     df.drop(columns=column_list_to_remove, inplace=True, axis=1)
-
-    cols_names = df.drop(columns=['id_traj', 'classe'], axis=1).columns.values
 
     mapping = dict(
         RPM='real',
@@ -118,3 +116,29 @@ def load_data_sae(path):
                     data[col + '_uptime'].append(group[col].mean())
 
     return data
+
+
+def get_max_length_sequence(data):
+    max_length = 0
+    for i in range(len(data)):
+        if data[i].shape[0] > max_length:
+            max_length = data[i].shape[0]
+
+    return max_length
+
+
+def preprocess_sequences(data, max_length, n_features):
+    new_data = []
+
+    for sequence in data:
+
+        new_sequence = np.array(sequence[0:sequence.shape[0]])
+
+        diff_length = max_length - sequence.shape[0]
+        if diff_length != 0:
+            for i in range(diff_length):
+                new_sequence = np.concatenate((new_sequence, np.array([[0 for i in range(n_features)]])))
+
+        new_data.append(new_sequence)
+
+    return np.array(new_data)

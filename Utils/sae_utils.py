@@ -1,24 +1,16 @@
+import numpy as np
+
 from keras import Sequential, Input, Model
 from keras.layers import Dense
-from keras.utils import to_categorical
-from keras.wrappers.scikit_learn import KerasClassifier
 from sklearn.metrics import f1_score
-from sklearn.model_selection import GridSearchCV, ParameterGrid, train_test_split, KFold
-
-from loader import load_data_sae
-import pandas as pd
-
-import numpy as np
-import os
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+from sklearn.model_selection import ParameterGrid, KFold
 
 
 def create_sae(input_dim, structure, optimizer):
-    input = Input(shape=(input_dim,))
+    sae_input = Input(shape=(input_dim,))
 
     # Encoder part
-    encoded = Dense(structure[0], activation='relu')(input)
+    encoded = Dense(structure[0], activation='relu')(sae_input)
     if len(structure) > 1:
         for i in range(1, len(structure)):
             encoded = Dense(structure[i])(encoded)
@@ -31,21 +23,30 @@ def create_sae(input_dim, structure, optimizer):
 
     decoded = Dense(input_dim, activation='relu')(decoded)
 
-    autoencoder = Model(input, decoded)
+    autoencoder = Model(sae_input, decoded)
     autoencoder.compile(optimizer=optimizer, loss='mean_squared_error')
 
-    encoder = Model(input, encoded)
+    encoder = Model(sae_input, encoded)
 
     return autoencoder, encoder
 
 
-def optimize_sae(X, cv):
+def optimize_sae(x, cv):
     optimizer = 'adam'
-    batch_size = [20, 40]
-    epochs = [50, 100]
+    batch_size = [10, 50]
+    epochs = [10, 50, 100]
     structure = [
-        [20, 10],
-        [30, 20, 10]
+        # 3 layers auto encoders
+        [40, 20, 10], [40, 20, 5], [40, 15, 10], [40, 15, 5],
+        [35, 20, 10], [35, 20, 5], [35, 15, 10], [35, 15, 5],
+        [30, 20, 10], [30, 20, 5], [30, 15, 10], [30, 15, 5],
+        [25, 20, 10], [25, 20, 5], [25, 15, 10], [25, 15, 5],
+
+        # 2 layers auto encoders
+        [40, 20], [40, 15], [40, 10],
+        [35, 20], [35, 15], [35, 10],
+        [30, 20], [30, 15], [30, 10],
+        [25, 20], [25, 15], [25, 10]
     ]
 
     param_grid = dict(
@@ -67,22 +68,22 @@ def optimize_sae(X, cv):
 
         # Cross validate results
         i = 1
-        for train, test in kf.split(X):
+        for train, test in kf.split(x):
             print('\tIteration', i)
 
-            trainX = X[train]
-            validationX = X[test]
+            train_x = x[train]
+            validation_x = x[test]
 
             # initialize the entry of the dict
 
             # Create the model
-            model, _ = create_sae(trainX.shape[1], combination['structure'], optimizer=optimizer)
+            model, _ = create_sae(train_x.shape[1], combination['structure'], optimizer=optimizer)
 
             # Train the model
-            model.fit(trainX, trainX, batch_size=combination['batch_size'], epochs=combination['epochs'], verbose=0)
+            model.fit(train_x, train_x, batch_size=combination['batch_size'], epochs=combination['epochs'], verbose=0)
 
             # Evaluate the model
-            test_loss = model.evaluate(validationX, validationX, verbose=0)
+            test_loss = model.evaluate(validation_x, validation_x, verbose=0)
 
             # Store the results in the dict
             search_results[str(combination)].append(test_loss)
@@ -158,11 +159,11 @@ def optimize_mlp(x, y, cv):
         for train, test in kf.split(x):
             print('\tIteration', i)
 
-            trainX = x[train]
-            validationX = x[test]
+            train_x = x[train]
+            validation_x = x[test]
 
-            trainy = y[train]
-            validationy = y[test]
+            train_y = y[train]
+            validation_y = y[test]
 
             # Create the model
             model = create_mlp(
@@ -173,15 +174,15 @@ def optimize_mlp(x, y, cv):
             )
 
             # Train the model
-            model.fit(trainX, trainy, batch_size=combination['batch_size'], epochs=combination['epochs'], verbose=0)
+            model.fit(train_x, train_y, batch_size=combination['batch_size'], epochs=combination['epochs'], verbose=0)
 
             # Make predictions
-            predictions = model.predict_classes(validationX)
+            predictions = model.predict_classes(validation_x)
 
             # Assess and store performances
             search_results[str(combination)].append(
                 np.round(
-                    f1_score(y_true=np.argmax(validationy, axis=1), y_pred=predictions, average='weighted'),
+                    f1_score(y_true=np.argmax(validation_y, axis=1), y_pred=predictions, average='weighted'),
                     decimals=7
                 )
             )
@@ -206,49 +207,3 @@ def optimize_mlp(x, y, cv):
                 best_params_list.append(combination)
 
     return best_params_list, max_f1, search_results
-
-
-data = pd.DataFrame(load_data_sae('/home/cua/PycharmProjects/CUA/Data/export-debut.csv'))
-
-X = data.drop(columns=['class'], axis=1).values
-y = to_categorical(data['class'].values - 1, np.unique(data['class'].values).shape[0])
-
-trainX, testX, trainy, testy = train_test_split(X, y, test_size=0.25)
-
-# Optimize the sae
-print('Optimizing SAE...\n')
-params, loss, results = optimize_sae(trainX, cv=3)
-best_params_sae = eval(params[0])
-print('\nOptimizing SAE done!\n\n')
-
-# Create the sae with it's best parameters and train it
-print('Training SAE...\n')
-sae, e = create_sae(input_dim=trainX.shape[1], structure=best_params_sae['structure'], optimizer='adam')
-sae.fit(trainX, trainX, batch_size=best_params_sae['batch_size'], epochs=best_params_sae['epochs'], verbose=2)
-print('Training SAE done!\n\n')
-
-# Encode train X
-encodedTrainX = e.predict(trainX)
-
-# Optimize the mlp
-print('Optimizing MLP...\n')
-best_params_list, max_f1, search_results = optimize_mlp(trainX, trainy, cv=3)
-best_params_mlp = eval(best_params_list[0])
-print('Optimizing MLP done!\n\n')
-
-# Create the sae with it's best parameters and train it
-print('Training MLP...\n')
-mlp = create_mlp(input_dim=encodedTrainX.shape[1], n_classes=trainy.shape[1], optimizer='adam', structure=best_params_mlp['structure'])
-mlp.fit(encodedTrainX, trainy, batch_size=best_params_mlp['batch_size'], epochs=best_params_mlp['epochs'], verbose=2)
-print('Training MLP done!\n\n')
-
-# Evaluate the model
-encodedTestX = e.predict(testX)
-predictions = mlp.predict_classes(encodedTestX)
-print('y_true:', np.argmax(testy, axis=1))
-print('y_pred:', predictions)
-print()
-print('test f1 score weighted :', np.round(
-    f1_score(y_true=np.argmax(testy, axis=1), y_pred=predictions, average='weighted'),
-    decimals=7
-))
