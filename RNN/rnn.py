@@ -21,13 +21,6 @@ from sklearn.metrics import f1_score
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
-def custom_f1_score(y_true, y_pred, n_decimals):
-    # Convert the one hot encoded class vector to a single value class
-    y_true_flat = np.argmax(y_true, axis=1)
-
-    return np.round(f1_score(y_true_flat, y_pred, average='weighted'), decimals=n_decimals)
-
-
 def create_model(n_units_output_lstm, n_units_output_dense, n_timesteps, n_features, n_classes):
     model = Sequential()
     model.add(LSTM(n_units_output_lstm, input_shape=(n_timesteps, n_features)))
@@ -47,7 +40,7 @@ def optimize_model(x, y, cv):
 
     # Create the hyper parameters possible values
     batch_size = [50, 100]
-    epochs = [5, 10]
+    epochs = [5]
     n_units_output_lstm = [100]
     n_units_output_dense = [100]
 
@@ -96,7 +89,12 @@ def optimize_model(x, y, cv):
             predictions = model.predict_classes(validationX)
 
             # Assess and store performances
-            search_results[str(combination)].append(custom_f1_score(y_true=validationy, y_pred=predictions, n_decimals=7))
+            search_results[str(combination)].append(
+                np.round(
+                    f1_score(y_true=np.argmax(validationy, axis=1), y_pred=predictions, average='weighted'),
+                    decimals=7
+                )
+            )
 
             # increment iteration counter
             i = i + 1
@@ -128,7 +126,7 @@ def evaluate_emergency_vehicles():
 
     best_params_list, max_f1, search_results = optimize_model(trainX, trainy, cv=3)
 
-    print('Best parameters possibilities found:\n', best_params_list, 'with performance:', max_f1)
+    print('Best parameters possibilities found:\n', best_params_list, 'with f1_score of', max_f1)
 
     # Ideally pick the simplest model in order to better generalize
     params = eval(best_params_list[0])
@@ -145,14 +143,17 @@ def evaluate_emergency_vehicles():
     print(model.summary())
 
     # Fit the model
-    model.fit(trainX, trainy, batch_size=params['batch_size'], epochs=params['epochs'], verbose=1)
+    model.fit(trainX, trainy, batch_size=params['batch_size'], epochs=params['epochs'], verbose=2)
 
     # Assess the performances
     predictions = model.predict_classes(testX)
     print('y_true:', np.argmax(testy, axis=1))
     print('y_pred:', predictions)
     print()
-    print('test f1 score weighted :', custom_f1_score(testy, predictions, n_decimals=7))
+    print('test f1 score weighted :', np.round(
+        f1_score(y_true=np.argmax(testy, axis=1), y_pred=predictions, average='weighted'),
+        decimals=7
+    ))
 
 
 evaluate_emergency_vehicles()
