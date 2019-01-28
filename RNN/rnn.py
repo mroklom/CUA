@@ -10,14 +10,22 @@ from keras.layers import LSTM
 from keras.utils import to_categorical
 from matplotlib import pyplot
 from keras.wrappers.scikit_learn import KerasClassifier
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, ParameterGrid, KFold
 from loader import load_data_rnn
 from sklearn.model_selection import train_test_split
 import os
 import numpy as np
+from sklearn.metrics import f1_score
 
 # Just disables the warning, doesn't enable AVX/FMA
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+
+def custom_f1_score(y_true, y_pred, n_decimals):
+    # Convert the one hot encoded class vector to a single value class
+    y_true_flat = np.argmax(y_true, axis=1)
+
+    return np.round(f1_score(y_true_flat, y_pred, average='weighted'), decimals=n_decimals)
 
 
 def create_model(n_units_output_lstm, n_units_output_dense, n_timesteps, n_features, n_classes):
@@ -27,31 +35,19 @@ def create_model(n_units_output_lstm, n_units_output_dense, n_timesteps, n_featu
     model.add(Dense(n_units_output_dense, activation='relu'))
     model.add(Dense(n_classes, activation='softmax'))
 
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.compile(loss='categorical_crossentropy', optimizer='adam')
 
     return model
 
 
-def optimize_model():
-    # Load  the data
-    X, Y = load_data_rnn('/home/cua/PycharmProjects/CUA/Data/export-debut.csv')
-
-    trainX, testX, trainy, testy = train_test_split(X, Y, test_size=0.25)
-
-    n_timesteps, n_features, n_classes = trainX.shape[1], trainX.shape[2], trainy.shape[1]
-
-    # Map the model to scikit learn
-    model = KerasClassifier(
-        build_fn=create_model,
-        n_timesteps=n_timesteps,
-        n_features=n_features,
-        n_classes=n_classes,
-        verbose=0
-    )
+def optimize_model(x, y, cv):
+    n_timesteps = x.shape[1]
+    n_features = x.shape[2]
+    n_classes = y.shape[1]
 
     # Create the hyper parameters possible values
-    batch_size = [100]
-    epochs = [10]
+    batch_size = [50, 100]
+    epochs = [5, 10]
     n_units_output_lstm = [100]
     n_units_output_dense = [100]
 
@@ -63,34 +59,65 @@ def optimize_model():
         n_units_output_dense=n_units_output_dense
     )
 
-    # Initialize the grid search
-    grid = GridSearchCV(
-        estimator=model,
-        param_grid=param_grid,
-        n_jobs=-1,
-        cv=2,
-        verbose=2
-    )
+    possible_combination = list(ParameterGrid(param_grid))
+    search_results = dict()
 
-    grid_result = grid.fit(trainX, trainy, verbose=2)
+    for combination in possible_combination:
+        print('Testing combination', str(combination))
 
-    print("Best: %f using %s" % (grid_result.best_score_, grid_result.best_params_))
+        search_results[str(combination)] = []
 
-    means = grid_result.cv_results_['mean_test_score']
-    stds = grid_result.cv_results_['std_test_score']
-    params = grid_result.cv_results_['params']
+        kf = KFold(n_splits=cv)
 
-    for mean, stdev, param in zip(means, stds, params):
-        print("%f (%f) with: %r" % (mean, stdev, param))
+        # Cross validate results
+        i = 1
+        for train, test in kf.split(x):
+            print('\tIteration', i)
 
-    return grid_result.best_params_
+            trainX = x[train]
+            validationX = x[test]
 
+            trainy = y[train]
+            validationy = y[test]
 
-# summarize scores
-def summarize_results(scores):
-    print(scores)
-    m, s = mean(scores), std(scores)
-    print('Accuracy: %.3f%% (+/-%.3f)' % (m, s))
+            # Create the model
+            model = create_model(
+                n_units_output_lstm=combination['n_units_output_lstm'],
+                n_units_output_dense=combination['n_units_output_dense'],
+                n_timesteps=n_timesteps,
+                n_features=n_features,
+                n_classes=n_classes
+            )
+
+            # Train the model
+            model.fit(trainX, trainy, batch_size=combination['batch_size'], epochs=combination['epochs'], verbose=2)
+
+            # Make predictions
+            predictions = model.predict_classes(validationX)
+
+            # Assess and store performances
+            search_results[str(combination)].append(custom_f1_score(y_true=validationy, y_pred=predictions, n_decimals=7))
+
+            # increment iteration counter
+            i = i + 1
+
+        print('Results for', str(combination))
+        print(search_results[str(combination)])
+        print()
+
+    # Find the best combination of parameters
+    best_params_list = []
+    max_f1 = 0
+    for combination, f1 in search_results.items():
+        mean_f1 = np.mean(f1)
+        if mean_f1 >= max_f1:
+            if mean_f1 > max_f1:
+                best_params_list = [combination]
+                max_f1 = mean_f1
+            elif mean_f1 == max_f1:
+                best_params_list.append(combination)
+
+    return best_params_list, max_f1, search_results
 
 
 def evaluate_emergency_vehicles():
@@ -99,8 +126,14 @@ def evaluate_emergency_vehicles():
     trainX, testX, trainy, testy = train_test_split(X, Y, test_size=0.25)
     n_timesteps, n_features, n_classes = trainX.shape[1], trainX.shape[2], trainy.shape[1]
 
-    params = optimize_model()
+    best_params_list, max_f1, search_results = optimize_model(trainX, trainy, cv=3)
 
+    print('Best parameters possibilities found:\n', best_params_list, 'with performance:', max_f1)
+
+    # Ideally pick the simplest model in order to better generalize
+    params = eval(best_params_list[0])
+
+    # Create the best model found
     model = create_model(
         n_units_output_lstm=params['n_units_output_lstm'],
         n_units_output_dense=params['n_units_output_dense'],
@@ -111,9 +144,15 @@ def evaluate_emergency_vehicles():
 
     print(model.summary())
 
+    # Fit the model
     model.fit(trainX, trainy, batch_size=params['batch_size'], epochs=params['epochs'], verbose=1)
-    loss, accuracy = model.evaluate(testX, testy, batch_size=10, verbose=1)
-    print('Accuracy :', accuracy)
+
+    # Assess the performances
+    predictions = model.predict_classes(testX)
+    print('y_true:', np.argmax(testy, axis=1))
+    print('y_pred:', predictions)
+    print()
+    print('test f1 score weighted :', custom_f1_score(testy, predictions, n_decimals=7))
 
 
 evaluate_emergency_vehicles()
