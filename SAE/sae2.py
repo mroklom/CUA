@@ -2,6 +2,7 @@ from keras import Sequential, Input, Model
 from keras.layers import Dense
 from keras.utils import to_categorical
 from keras.wrappers.scikit_learn import KerasClassifier
+from sklearn.metrics import f1_score
 from sklearn.model_selection import GridSearchCV, ParameterGrid, train_test_split, KFold
 
 from loader import load_data_sae
@@ -127,8 +128,8 @@ def create_mlp(input_dim, n_classes, optimizer, structure=None):
     return model
 
 
-def optimize_mlp(X, y):
-    optimizer = 'adam'
+def optimize_mlp(x, y, cv):
+    # Create the hyper parameters possible values
     batch_size = [20, 40]
     epochs = [50, 100]
     structure = [
@@ -136,40 +137,75 @@ def optimize_mlp(X, y):
         [5]
     ]
 
-    model_mlp = KerasClassifier(
-        build_fn=create_mlp,
-        input_dim=X.shape[1],
-        n_classes=y.shape[1],
-        optimizer=optimizer,
-        verbose=0
-    )
-
     param_grid_mlp = dict(
         batch_size=batch_size,
         epochs=epochs,
         structure=structure
     )
 
-    grid_mlp = GridSearchCV(
-        estimator=model_mlp,
-        param_grid=param_grid_mlp,
-        n_jobs=-1,
-        cv=3,
-        verbose=1
-    )
+    possible_combination = list(ParameterGrid(param_grid_mlp))
+    search_results = dict()
 
-    grid_result_mlp = grid_mlp.fit(X, y, verbose=0)
+    for combination in possible_combination:
+        print('Testing combination', str(combination))
 
-    print("Best: %f using %s" % (grid_result_mlp.best_score_, grid_result_mlp.best_params_))
+        search_results[str(combination)] = []
 
-    means = grid_result_mlp.cv_results_['mean_test_score']
-    stds = grid_result_mlp.cv_results_['std_test_score']
-    params = grid_result_mlp.cv_results_['params']
+        kf = KFold(n_splits=cv)
 
-    for mean, stdev, param in zip(means, stds, params):
-        print("%f (%f) with: %r" % (mean, stdev, param))
+        # Cross validate results
+        i = 1
+        for train, test in kf.split(x):
+            print('\tIteration', i)
 
-    return grid_result_mlp.best_params_
+            trainX = x[train]
+            validationX = x[test]
+
+            trainy = y[train]
+            validationy = y[test]
+
+            # Create the model
+            model = create_mlp(
+                input_dim=x.shape[1],
+                n_classes=y.shape[1],
+                optimizer='adam',
+                structure=combination['structure']
+            )
+
+            # Train the model
+            model.fit(trainX, trainy, batch_size=combination['batch_size'], epochs=combination['epochs'], verbose=0)
+
+            # Make predictions
+            predictions = model.predict_classes(validationX)
+
+            # Assess and store performances
+            search_results[str(combination)].append(
+                np.round(
+                    f1_score(y_true=np.argmax(validationy, axis=1), y_pred=predictions, average='weighted'),
+                    decimals=7
+                )
+            )
+
+            # increment iteration counter
+            i = i + 1
+
+        print('Results for', str(combination))
+        print(search_results[str(combination)])
+        print()
+
+    # Find the best combination of parameters
+    best_params_list = []
+    max_f1 = 0
+    for combination, f1 in search_results.items():
+        mean_f1 = np.mean(f1)
+        if mean_f1 >= max_f1:
+            if mean_f1 > max_f1:
+                best_params_list = [combination]
+                max_f1 = mean_f1
+            elif mean_f1 == max_f1:
+                best_params_list.append(combination)
+
+    return best_params_list, max_f1, search_results
 
 
 data = pd.DataFrame(load_data_sae('/home/cua/PycharmProjects/CUA/Data/export-debut.csv'))
@@ -196,7 +232,8 @@ encodedTrainX = e.predict(trainX)
 
 # Optimize the mlp
 print('Optimizing MLP...\n')
-best_params_mlp = optimize_mlp(encodedTrainX, trainy)
+best_params_list, max_f1, search_results = optimize_mlp(trainX, trainy, cv=3)
+best_params_mlp = eval(best_params_list[0])
 print('Optimizing MLP done!\n\n')
 
 # Create the sae with it's best parameters and train it
@@ -207,5 +244,11 @@ print('Training MLP done!\n\n')
 
 # Evaluate the model
 encodedTestX = e.predict(testX)
-loss_mlp, accuracy_mlp = mlp.evaluate(encodedTestX, testy, verbose=0)
-print('Accuracy on test set:', accuracy_mlp)
+predictions = mlp.predict_classes(encodedTestX)
+print('y_true:', np.argmax(testy, axis=1))
+print('y_pred:', predictions)
+print()
+print('test f1 score weighted :', np.round(
+    f1_score(y_true=np.argmax(testy, axis=1), y_pred=predictions, average='weighted'),
+    decimals=7
+))
